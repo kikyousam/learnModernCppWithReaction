@@ -1,0 +1,11 @@
+# 可执行文件
+*.exe
+*.out
+
+# 编译文件
+*.o
+*.a
+build/
+
+# IDE
+.vscode/
