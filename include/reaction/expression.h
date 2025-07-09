@@ -5,7 +5,10 @@
 
 namespace reaction
 {
-    template <typename T, typename ... Args>
+    struct VarExpr{};
+    struct CalcExpr{};
+
+    template <typename Type, typename ... Args>
     class DataSource;
 
     template <typename T>
@@ -38,14 +41,22 @@ namespace reaction
     class Expression<Fun, Args...> : public Resource<ReturnType<Fun, Args...>>
     {
     public:
+        using ExprType = CalcExpr;
+        using valueType = ReturnType<Fun, Args...>;
         template<typename F, typename... A>
         Expression(F &&fun, A &&... args):
             Resource<ReturnType<Fun, Args...>>(),
             m_fun(std::forward<F>(fun)),
             m_args(std::forward<A>(args)...) {
+                this->updateObserver(std::forward<A>(args)...);
                 evaluate();
             }
     private:
+        void valueChanged() override{
+            evaluate();
+            this->notify();
+        }
+
         void evaluate()
         {
             auto result = [&]<std::size_t...I>(std::index_sequence<I...>)
@@ -66,6 +77,8 @@ namespace reaction
     {
     public:
         // Expression(Type &&t) : Resource<Type>(std::forward<Type>(t));  // 在派生类中委托构造基类的构造函数。 CPP11可以用下面替代
+        using ExprType = VarExpr;
         using Resource<Type>::Resource;
+        using valueType = Type;
     };
 }

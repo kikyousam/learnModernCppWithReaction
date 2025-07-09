@@ -4,14 +4,23 @@
 
 namespace reaction
 {
-    template<typename T, typename... Args>
-    class DataSource : public Expression<T, Args...>  //用来和用户交互, 采用继承的方式表示is a的关系
+    template<typename Type, typename... Args>
+    class DataSource : public Expression<Type, Args...>  //用来和用户交互, 采用继承的方式表示is a的关系
     {
     public:
+        using ExprType = Expression<Type, Args...>::ExprType;
+        using valueType = Expression<Type, Args...>::valueType;
         DataSource(const DataSource& d) {}
-        using Expression<T, Args...>::Expression;
+        using Expression<Type, Args...>::Expression;
         auto get() const {
             return this->getValue();
+        }
+
+        template <typename T>
+            requires ConvertCC<T, valueType> && VarExprCC<ExprType>
+        void value(T &&t) {
+            this->updateValue(std::forward<T>(t));
+            this->notify();
         }
     };
 

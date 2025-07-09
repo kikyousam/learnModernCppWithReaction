@@ -2,11 +2,12 @@
 
 #include <memory>
 #include <exception>
+#include "reaction/oberverNode.h"
 
 namespace reaction
 {
     template<typename Type>
-    class Resource
+    class Resource: public ObserverNode     //一个值就对应一个观察者结点
     {
     public:
         // Resource(Type &&t) :m_ptr<std::make_unique<Type>(std::forward<Type>(t)) {}// 引用折叠不能作用于长生命周期的对象，可以用于函数
