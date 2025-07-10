@@ -9,7 +9,7 @@ namespace reaction
     struct CalcExpr{};
 
     template <typename Type, typename ... Args>
-    class DataSource;
+    class ReactImpl;
 
     template <typename T>
     struct ExpressionTraits
@@ -18,19 +18,19 @@ namespace reaction
     };
 
     template <typename T>
-    struct ExpressionTraits<DataSource<T>>
+    struct ExpressionTraits<ReactImpl<T>>
     {
         using type = T;
     };
 
     template <typename Fun, typename... Args>
-    struct ExpressionTraits<DataSource<Fun, Args...>>
+    struct ExpressionTraits<ReactImpl<Fun, Args...>>
     {
         using type = std::invoke_result_t<Fun, typename ExpressionTraits<Args>::type...>;  //为了避免歧义，递归萃取Args中的类型
     };
 
     template <typename Fun, typename... Args>
-    using ReturnType = typename ExpressionTraits<DataSource<Fun, Args...>>::type;
+    using ReturnType = typename ExpressionTraits<ReactImpl<Fun, Args...>>::type;
     
     // 主模板声明（带参数包）
     template <typename... Ts>

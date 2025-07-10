@@ -2,6 +2,7 @@
 
 #include <vector>
 #include "reaction/concept.h"
+#include <unordered_set>
 
 namespace reaction
 {
@@ -29,4 +30,27 @@ namespace reaction
     private:
         std::vector<ObserverNode *> m_observers;
     };
+
+    using NodePtr = std::shared_ptr<ObserverNode>;
+    class ObserverGraph {  //管理类，全局单例
+    public:
+        static ObserverGraph& getINstance()
+        {
+            static ObserverGraph instance;
+            return instance;
+        }
+
+        void addNode(NodePtr node)
+        {
+            m_nodes.insert(node);
+        }
+
+        void removeNode(NodePtr node)
+        {
+            m_nodes.erase(node);
+        }
+    private:
+        ObserverGraph() = default;
+        std::unordered_set<NodePtr> m_nodes;
+    }
 }
