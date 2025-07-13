@@ -6,7 +6,7 @@
 
 namespace reaction
 {
-    class ObserverNode
+    class ObserverNode : public std::enable_shared_from_this<ObserverNode>  //使用enable_shared_from_this来支持shared_ptr
     {
     public:
         ~ObserverNode() = default; //虚函数需要一个虚析构
@@ -19,7 +19,7 @@ namespace reaction
 
         template <typename... Args>
         void updateObserver(Args&&... args) {
-            (void)(..., args.addObserver(this));
+            (void)(..., args.getPtr()->addObserver(this));
         }
 
         void notify() {
@@ -34,7 +34,7 @@ namespace reaction
     using NodePtr = std::shared_ptr<ObserverNode>;
     class ObserverGraph {  //管理类，全局单例
     public:
-        static ObserverGraph& getINstance()
+        static ObserverGraph& getInstance()
         {
             static ObserverGraph instance;
             return instance;
@@ -52,5 +52,5 @@ namespace reaction
     private:
         ObserverGraph() = default;
         std::unordered_set<NodePtr> m_nodes;
-    }
+    };
 }
