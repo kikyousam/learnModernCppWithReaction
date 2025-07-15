@@ -3,6 +3,7 @@
 #include <vector>
 #include "reaction/concept.h"
 #include <unordered_set>
+#include "reaction/utility.h"
 
 namespace reaction
 {
@@ -11,7 +12,9 @@ namespace reaction
     public:
         ~ObserverNode() = default; //虚函数需要一个虚析构
 
-        virtual void valueChanged() {}
+        virtual void valueChanged() {
+            this->notify();
+        }
 
         void addObserver(ObserverNode* observer) {
             m_observers.emplace_back(observer);
@@ -31,7 +34,6 @@ namespace reaction
         std::vector<ObserverNode *> m_observers;
     };
 
-    using NodePtr = std::shared_ptr<ObserverNode>;
     class ObserverGraph {  //管理类，全局单例
     public:
         static ObserverGraph& getInstance()
@@ -52,5 +54,38 @@ namespace reaction
     private:
         ObserverGraph() = default;
         std::unordered_set<NodePtr> m_nodes;
+    };
+
+    class FieldGraph
+    {
+    public:
+        static FieldGraph& getInstance()
+        {
+            static FieldGraph instance;
+            return instance;
+        }
+
+        void addObj(const uint64_t &id, NodePtr node)
+        {
+            m_fieldMap[id].insert(node);
+        }
+
+        void deleteObj(const uint64_t &id)
+        {
+            m_fieldMap.erase(id);
+        }
+
+        void bindField(const uint64_t &id, NodePtr node)
+        {
+            if(!m_fieldMap.contains(id)) {
+                return;
+            }
+            for(auto &n : m_fieldMap[id]) {
+                n->addObserver(node.get());
+            }
+        }
+    private:
+        FieldGraph() = default;
+        std::unordered_map<uint64_t, std::unordered_set<NodePtr>> m_fieldMap;
     };
 }

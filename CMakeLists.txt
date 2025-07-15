@@ -9,6 +9,7 @@ if(MSVC)
     add_compile_options(/W4 /GR-)
 else()
     add_compile_options(-Wall -Wextra -pedantic -fno-rtti -std=c++2a)
+    add_compile_options(-fconcepts-diagnostics-depth=2)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)

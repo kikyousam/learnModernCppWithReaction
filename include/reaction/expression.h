@@ -15,7 +15,7 @@ namespace reaction
     {
     public:
         using ExprType = CalcExpr;
-        using valueType = ReturnType<Fun, Args...>;
+        using ValueType = ReturnType<Fun, Args...>;
         template<typename F, typename... A>
         Expression(F &&fun, A &&... args):
             Resource<ReturnType<Fun, Args...>>(),
@@ -32,12 +32,19 @@ namespace reaction
 
         void evaluate()
         {
-            auto result = [&]<std::size_t...I>(std::index_sequence<I...>)
-            {
-                return std::invoke(m_fun, std::get<I>(m_args).get().get()...);
-            }(std::make_index_sequence<std::tuple_size_v<decltype(m_args)>>{});
+            if constexpr(VoidType<ValueType>) {
+                [&]<std::size_t...I>(std::index_sequence<I...>)
+                {
+                    std::invoke(m_fun, std::get<I>(m_args).get().get()...);
+                }(std::make_index_sequence<std::tuple_size_v<decltype(m_args)>>{});
+            } else {
+                auto result = [&]<std::size_t...I>(std::index_sequence<I...>)
+                {
+                    return std::invoke(m_fun, std::get<I>(m_args).get().get()...);
+                }(std::make_index_sequence<std::tuple_size_v<decltype(m_args)>>{});
 
-            this->updateValue(result);
+                this->updateValue(result);
+            }
         }
         Fun m_fun;
         std::tuple<std::reference_wrapper<Args>...> m_args;
@@ -52,6 +59,6 @@ namespace reaction
         // Expression(Type &&t) : Resource<Type>(std::forward<Type>(t));  // 在派生类中委托构造基类的构造函数。 CPP11可以用下面替代
         using ExprType = VarExpr;
         using Resource<Type>::Resource;
-        using valueType = Type;
+        using ValueType = Type;
     };
 }
