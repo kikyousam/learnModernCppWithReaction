@@ -4,6 +4,7 @@
 #include "reaction/concept.h"
 #include <unordered_set>
 #include "reaction/utility.h"
+#include <functional>
 
 namespace reaction
 {
@@ -22,7 +23,7 @@ namespace reaction
 
         template <typename... Args>
         void updateObserver(Args&&... args) {
-            (void)(..., args.getPtr()->addObserver(this));
+            (void)(..., args->addObserver(this));
         }
 
         void notify() {

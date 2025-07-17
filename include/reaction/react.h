@@ -5,6 +5,19 @@
 
 namespace reaction
 {
+    inline thread_local std::function<void(NodePtr)> g_reg_fun = nullptr;  //全局注册函数，用于注册回调
+
+    struct RegGuard {
+    public:
+        RegGuard(const std::function<void(NodePtr)> & reg_fun) {
+            g_reg_fun = reg_fun;  //设置全局注册函数
+        }
+
+        ~RegGuard() {
+            g_reg_fun = nullptr;  //清除注册函数
+        }
+    };
+
     template<typename Type, typename... Args>
     class ReactImpl : public Expression<Type, Args...>  //用来和用户交互, 采用继承的方式表示is a的关系
     {  //实现类
@@ -15,6 +28,30 @@ namespace reaction
         using Expression<Type, Args...>::Expression;
         decltype(auto) get() const {        //完全保留返回值的类型
             return this->getValue();
+        }
+
+        template<typename F, HasArguments... A>
+        void set(F&& fun, A&&... args) {
+            this->setSource(std::forward<F>(fun), std::forward<A>(args)...);
+        }
+
+        template<typename F>
+        void set(F&& fun) {
+            RegGuard guard([this] (NodePtr obj) {
+                this->addObjCb(obj);
+            });  //注册函数
+            this->setSource(std::forward<F>(fun));
+        }
+
+        void set() {
+            RegGuard guard([this] (NodePtr obj) {
+                this->addObjCb(obj);
+            });  //注册函数
+            this->setOpExpr();
+        }
+
+        auto getRaw() const {
+            return this->getRawPtr();
         }
 
         template <typename T>
@@ -49,6 +86,7 @@ namespace reaction
     class React  //管理类
     {
     public:
+        using ValueType = typename ReactType::ValueType;
         ReactType &operator*() {
             return *getPtr();
         }
@@ -104,9 +142,21 @@ namespace reaction
         }
 
         decltype(auto) get() const 
-            requires(IsDataReact<ReactType>)  //如果是数据react
         {
             return getPtr()->get();
+        }
+
+        decltype(auto) operator()() const
+        {
+            if(g_reg_fun) {
+                std::invoke(g_reg_fun, getPtr());  //调用全局注册函数
+            }
+            return get();
+        }
+
+        template<typename F, typename... A>
+        void reset(F&& fun, A&&... args) {
+            getPtr()->set(std::forward<F>(fun), std::forward<A>(args)...);
         }
 
         template <typename T>
@@ -121,9 +171,9 @@ namespace reaction
             throw std::runtime_error("Weak pointer expired");
         }
 
-        // operator decltype(std::declval<ReactType>().get())() const {
-        //     return get();
-        // }
+        auto operator->() const {
+            return getPtr()->getRaw();
+        }
     private:
         std::weak_ptr<ReactType> m_weakPtr;
     };
@@ -165,10 +215,19 @@ namespace reaction
         return React(ptr);
     }
 
+    template <typename OpExpr>
+    auto expr(OpExpr &&opExpr) {
+        auto ptr = std::make_shared<ReactImpl<std::decay_t<OpExpr>>>(std::forward<OpExpr>(opExpr));
+        ObserverGraph::getInstance().addNode(ptr);
+        ptr->set();
+        return React(ptr);
+    }
+
     template <typename Func, typename... Args>
     auto calc(Func &&fun, Args &&...args) {
-        auto ptr = std::make_shared<ReactImpl<std::decay_t<Func>, std::decay_t<Args>...>>(std::forward<Func>(fun), std::forward<Args>(args)...);
+        auto ptr = std::make_shared<ReactImpl<std::decay_t<Func>, std::decay_t<Args>...>>();
         ObserverGraph::getInstance().addNode(ptr);
+        ptr->set(std::forward<Func>(fun), std::forward<Args>(args)...);
         return React(ptr);
     }
 
