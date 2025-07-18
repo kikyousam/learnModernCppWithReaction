@@ -1,7 +1,7 @@
-#include "gtest/gtest.h"
 #include "reaction/react.h"
-#include <numeric>
+#include "gtest/gtest.h"
 #include <chrono>
+#include <numeric>
 
 TEST(ReactionTest, TestCommonUse) {
     auto a = reaction::var(1);
@@ -65,7 +65,6 @@ TEST(ReactionTest, TestConst) {
     // b.value(4.14); // compile error;
 }
 
-
 class Person : public reaction::FieldBase {
 public:
     Person(std::string name, int age, bool male)
@@ -103,16 +102,13 @@ TEST(BasicTest, FieldTest) {
     EXPECT_EQ(ds.get(), "1lummy-new");
 }
 
-TEST(ReactionTest, TestAction)
-{
+TEST(ReactionTest, TestAction) {
     auto a = reaction::var(1);
     auto b = reaction::var(3.14);
-    auto at = reaction::action([](int aa, double bb)
-                               { std::cout << "a = " << aa << '\t' << "b = " << bb << '\t'; }, a, b);
+    auto at = reaction::action([](int aa, double bb) { std::cout << "a = " << aa << '\t' << "b = " << bb << '\t'; }, a, b);
 
     bool trigger = false;
-    auto att = reaction::action([&]([[maybe_unused]] auto atat)
-                                { trigger = true; std::cout << "at trigger " << std::endl; }, at);
+    auto att = reaction::action([&]([[maybe_unused]] auto atat) { trigger = true; std::cout << "at trigger " << std::endl; }, at);
 
     trigger = false;
 
@@ -120,8 +116,7 @@ TEST(ReactionTest, TestAction)
     EXPECT_TRUE(trigger);
 }
 
-TEST(ReactionTest, TestReset)
-{
+TEST(ReactionTest, TestReset) {
     auto a = reaction::var(1);
     auto b = reaction::var(2);
 
@@ -151,7 +146,6 @@ TEST(ReactionTest, TestParentheses) {
     EXPECT_EQ(dds.get(), "25.140000");
 }
 
-
 TEST(ReactionTest, TestExpr) {
     auto a = reaction::var(1);
     auto b = reaction::var(2);
@@ -162,6 +156,31 @@ TEST(ReactionTest, TestExpr) {
     a.value(2);
     EXPECT_EQ(ds.get(), 4);
     ASSERT_FLOAT_EQ(expr_ds.get(), -3.86);
+}
+
+TEST(ReactionTest, TestSelfDependency) {
+    auto a = reaction::var(1);
+    auto dsA = reaction::calc([](int aa) { return aa; }, a);
+
+    EXPECT_THROW(dsA.reset([&]() { return a() + dsA(); }), std::runtime_error);
+}
+
+TEST(ReactionTest, TestCycleDependency) {
+    auto a = reaction::var(1);
+    auto b = reaction::var(2);
+    auto c = reaction::var(3);
+
+    auto dsA = reaction::calc([](int bb) { return bb; }, b);
+
+    auto dsB = reaction::calc([](int cc) { return cc; }, c);
+
+    auto dsC = reaction::calc([](int aa) { return aa; }, a);
+
+    dsA.reset([&]() { return b() + dsB(); });
+
+    dsB.reset([&]() { return c() * dsC(); });
+
+    EXPECT_THROW(dsC.reset([&]() { return a() - dsA(); }), std::runtime_error);
 }
 
 // struct ProcessedData {
@@ -270,8 +289,7 @@ TEST(ReactionTest, TestExpr) {
 //               << duration.count() / static_cast<double>(ITERATIONS) << "ms\n";
 // }
 
-int main(int argc, char** argv)
-{
+int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
