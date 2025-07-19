@@ -1,8 +1,8 @@
+#include "reaction/concept.h"
 #include <atomic>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
-
 
 namespace reaction {
 class UniqueID {
@@ -31,6 +31,7 @@ private:
     friend struct std::hash<UniqueID>; // Allow std::hash to access private members
 };
 
+using NodeWeak = std::weak_ptr<ObserverNode>;
 } // namespace reaction
 
 namespace std {
@@ -40,4 +41,26 @@ struct hash<reaction::UniqueID> {
         return std::hash<uint64_t>()(id);
     }
 };
+
+struct WeakPtrHash {
+    size_t operator()(const reaction::NodeWeak &wp) const noexcept {
+        if (auto sp = wp.lock()) {
+            return std::hash<reaction::ObserverNode *>()(sp.get());
+        }
+        return 0; // Return 0 if the weak pointer is expired
+    }
+};
+
+struct WeakPtrEqual {
+    bool operator()(const reaction::NodeWeak &lhs, const reaction::NodeWeak &rhs) const noexcept {
+        return lhs.lock() == rhs.lock();
+    }
+};
 } // namespace std
+
+namespace reaction {
+using NodeSet = std::unordered_set<NodeWeak, std::WeakPtrHash, std::WeakPtrEqual>;
+using NodeMap = std::unordered_map<NodeWeak, uint64_t, std::WeakPtrHash, std::WeakPtrEqual>;
+using NodeSetRef = std::reference_wrapper<NodeSet>;
+using NodeMapRef = std::reference_wrapper<NodeMap>;
+} // namespace reaction

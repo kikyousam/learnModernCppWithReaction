@@ -1,15 +1,12 @@
 #pragma once
 
-#include "reaction/concept.h"
 #include "reaction/utility.h"
 #include <functional>
 
 namespace reaction {
 
-using NodeSet = std::unordered_set<NodePtr>;
-using NodeSetRef = std::reference_wrapper<NodeSet>;
-
-class ObserverGraph { // 管理类，全局单例
+inline thread_local NodeSet g_delay_list; // 延迟注册的观察者列表
+class ObserverGraph {                     // 管理类，全局单例
 public:
     static ObserverGraph &getInstance() {
         static ObserverGraph instance;
@@ -25,6 +22,7 @@ public:
             throw std::runtime_error("Adding this observer would create a cycle in the graph.");
         }
 
+        hasRepeatDependency(source, target);
         m_observerList.at(target).get().insert(source);
         m_dependentList.at(source).insert(target);
     }
@@ -49,6 +47,59 @@ private:
         return isCycle;
     }
 
+    bool hasRepeatDependency(NodePtr source, NodePtr target) {
+        NodeSet dependencies;
+        collectDependencies(source, dependencies);
+
+        NodeSet visited;
+        for (auto dependency : m_dependentList.at(source)) {
+            checkDependency(source, dependency.lock(), dependencies, visited);
+        }
+    }
+
+    void checkDependency(NodePtr source, NodePtr dependency, NodeSet targetDependencies, NodeSet &visited) {
+        if (visited.contains(dependency)) {
+            return; // 已经访问过，避免重复检查
+        }
+        visited.insert(dependency);
+
+        if (targetDependencies.contains(dependency)) {
+            if (m_repeatList.at(source).get().contains(dependency)) {
+                m_repeatList.at(source).get()[dependency]++;
+            } else {
+                m_repeatList.at(source).get()[dependency] = 2; // 初始计数为2，表示重复依赖
+            }
+        }
+
+        for (auto &neighbor : m_dependentList.at(dependency)) {
+            checkDependency(source, neighbor.lock(), targetDependencies, visited);
+        }
+    }
+    void collectDependencies(NodePtr node, NodeSet &dependencies) {
+        NodeMap dependenciesMap;
+        collectDependencies(node, dependenciesMap);
+
+        for (auto &[depNode, count] : dependenciesMap) {
+            if (count == 1) {
+                dependencies.insert(depNode.lock());
+            }
+        }
+    }
+
+    void collectDependencies(NodePtr node, NodeMap &dependencies) {
+        if (!node) return;
+
+        if (dependencies.contains(node)) {
+            dependencies[node]++;
+        } else {
+            dependencies[node] = 1;
+        }
+
+        for (auto &neighbor : m_dependentList.at(node)) {
+            collectDependencies(neighbor.lock(), dependencies);
+        }
+    }
+
     bool dfs(NodePtr node, NodeSet &visited, NodeSet &stack) {
         if (stack.contains(node)) {
             return true; // Cycle detected
@@ -61,7 +112,7 @@ private:
         stack.insert(node);
 
         for (const auto &neighbor : m_observerList.at(node).get()) {
-            if (dfs(neighbor, visited, stack)) {
+            if (dfs(neighbor.lock(), visited, stack)) {
                 return true;
             }
         }
@@ -73,6 +124,7 @@ private:
     ObserverGraph() = default;
     std::unordered_map<NodePtr, NodeSetRef> m_observerList;
     std::unordered_map<NodePtr, NodeSet> m_dependentList;
+    std::unordered_map<NodePtr, NodeMapRef> m_repeatList; // 用于存储重复的观察者
 };
 
 class ObserverNode : public std::enable_shared_from_this<ObserverNode> // 使用enable_shared_from_this来支持shared_ptr
@@ -91,13 +143,29 @@ public:
     }
 
     void notify() {
+        for (auto &[repeat, _] : m_repeats) {
+            g_delay_list.insert(repeat.lock());
+        }
+
         for (auto observer : m_observers) {
-            observer->valueChanged();
+            if (!g_delay_list.contains(observer)) {
+                if (auto obsPtr = observer.lock()) {
+                    obsPtr->valueChanged();
+                }
+            }
+        }
+
+        g_delay_list.clear();
+        for (auto &[repeat, _] : m_repeats) {
+            if (auto obsPtr = repeat.lock()) {
+                obsPtr->valueChanged();
+            }
         }
     }
 
 private:
     NodeSet m_observers;
+    NodeMap m_repeats; // 用于存储重复的观察者
 
     friend class ObserverGraph; // 允许ObserverGraph访问私有成员
 };
@@ -105,6 +173,7 @@ private:
 inline void ObserverGraph::addNode(NodePtr node) {
     m_observerList.insert({node, std::ref(node->m_observers)});
     m_dependentList.insert({node, NodeSet{}});
+    m_repeatList.insert({node, std::ref(node->m_repeats)});
 }
 class FieldGraph {
 public:
@@ -126,7 +195,7 @@ public:
             return;
         }
         for (auto &n : m_fieldMap[id]) {
-            ObserverGraph::getInstance().addObserver(node, n);
+            ObserverGraph::getInstance().addObserver(node, n.lock());
         }
     }
 
