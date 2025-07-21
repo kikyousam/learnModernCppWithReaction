@@ -47,9 +47,9 @@ private:
         return isCycle;
     }
 
-    bool hasRepeatDependency(NodePtr source, NodePtr target) {
+    void hasRepeatDependency(NodePtr source, NodePtr target) {
         NodeSet dependencies;
-        collectDependencies(source, dependencies);
+        collectDependencies(target, dependencies);
 
         NodeSet visited;
         for (auto dependency : m_dependentList.at(source)) {
@@ -57,21 +57,21 @@ private:
         }
     }
 
-    void checkDependency(NodePtr source, NodePtr dependency, NodeSet targetDependencies, NodeSet &visited) {
-        if (visited.contains(dependency)) {
+    void checkDependency(NodePtr source, NodePtr node, NodeSet targetDependencies, NodeSet &visited) {
+        if (visited.contains(node)) {
             return; // 已经访问过，避免重复检查
         }
-        visited.insert(dependency);
+        visited.insert(node);
 
-        if (targetDependencies.contains(dependency)) {
-            if (m_repeatList.at(source).get().contains(dependency)) {
-                m_repeatList.at(source).get()[dependency]++;
+        if (targetDependencies.contains(node)) {
+            if (m_repeatList.at(node).get().contains(source)) {
+                m_repeatList.at(node).get()[source]++;
             } else {
-                m_repeatList.at(source).get()[dependency] = 2; // 初始计数为2，表示重复依赖
+                m_repeatList.at(node).get()[source] = 2; // 初始计数为2，表示重复依赖
             }
         }
 
-        for (auto &neighbor : m_dependentList.at(dependency)) {
+        for (auto &neighbor : m_dependentList.at(node)) {
             checkDependency(source, neighbor.lock(), targetDependencies, visited);
         }
     }
@@ -81,7 +81,7 @@ private:
 
         for (auto &[depNode, count] : dependenciesMap) {
             if (count == 1) {
-                dependencies.insert(depNode.lock());
+                dependencies.insert(depNode);
             }
         }
     }
@@ -155,10 +155,15 @@ public:
             }
         }
 
-        g_delay_list.clear();
-        for (auto &[repeat, _] : m_repeats) {
-            if (auto obsPtr = repeat.lock()) {
-                obsPtr->valueChanged();
+        if (!g_delay_list.empty()) {
+            for (auto &[repeat, _] : m_repeats) {
+                g_delay_list.erase(repeat.lock());
+            }
+
+            for (auto &[repeat, _] : m_repeats) {
+                if (auto obsPtr = repeat.lock()) {
+                    obsPtr->valueChanged();
+                }
             }
         }
     }
