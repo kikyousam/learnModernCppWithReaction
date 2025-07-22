@@ -17,14 +17,14 @@ public:
     }
 };
 
-template <typename Type, typename... Args>
-class ReactImpl : public Expression<Type, Args...> // 用来和用户交互, 采用继承的方式表示is a的关系
-{                                                  // 实现类
+template <IsTrigMode TrigMode, typename Type, typename... Args>
+class ReactImpl : public Expression<TrigMode, Type, Args...> // 用来和用户交互, 采用继承的方式表示is a的关系
+{                                                            // 实现类
 public:
-    using ExprType = Expression<Type, Args...>::ExprType;
-    using ValueType = Expression<Type, Args...>::ValueType;
+    using ExprType = Expression<TrigMode, Type, Args...>::ExprType;
+    using ValueType = Expression<TrigMode, Type, Args...>::ValueType;
     ReactImpl(const ReactImpl &d) {}
-    using Expression<Type, Args...>::Expression;
+    using Expression<TrigMode, Type, Args...>::Expression;
     decltype(auto) get() const { // 完全保留返回值的类型
         return this->getValue();
     }
@@ -59,10 +59,8 @@ public:
     }
 
     template <typename T>
-        requires(Convertable<T, ValueType> && IsVarExpr<ExprType> && !ConstType<ValueType>)
-    void value(T &&t) {
-        this->updateValue(std::forward<T>(t));
-        this->notify();
+    requires(Convertable<T, ValueType> &&IsVarExpr<ExprType> && !ConstType<ValueType>) void value(T &&t) {
+        this->notify(this->updateValue(std::forward<T>(t)));
     }
 
     void addWeakRef() {
@@ -153,13 +151,30 @@ public:
     }
 
     template <typename F, typename... A>
-    void reset(F &&fun, A &&...args) {
+    React &reset(F &&fun, A &&...args) {
         getPtr()->set(std::forward<F>(fun), std::forward<A>(args)...);
+        return *this;
     }
 
     template <typename T>
-    void value(T &&t) {
-        return getPtr()->value(std::forward<T>(t));
+    React &value(T &&t) {
+        getPtr()->value(std::forward<T>(t));
+        return *this;
+    }
+
+    template <typename F, typename... A>
+    React &filter(F &&fun, A &&...args) {
+        getPtr()->setFilterFunc(std::forward<F>(fun), std::forward<A>(args)...);
+        return *this;
+    }
+
+    React &setName(const std::string &name) {
+        ObserverGraph::getInstance().setName(getPtr(), name);
+        return *this;
+    }
+
+    std::string getName() const {
+        return ObserverGraph::getInstance().getName(getPtr());
     }
 
     auto getPtr() const {
@@ -177,13 +192,13 @@ private:
     std::weak_ptr<ReactType> m_weakPtr;
 };
 
-template <typename SrcType>
-using Field = React<ReactImpl<std::decay_t<SrcType>>>; // Field是一个React类型的别名，表示一个字段
+template <typename SrcType, IsTrigMode TrigMode = ChangeTrig>
+using Field = React<ReactImpl<TrigMode, std::decay_t<SrcType>>>; // Field是一个React类型的别名，表示一个字段
 class FieldBase {
 public:
-    template <typename T>
+    template <IsTrigMode TrigMode = ChangeTrig, typename T>
     auto field(T &&t) {
-        auto ptr = std::make_shared<ReactImpl<std::decay_t<T>>>(std::forward<T>(t));
+        auto ptr = std::make_shared<ReactImpl<TrigMode, std::decay_t<T>>>(std::forward<T>(t));
         ObserverGraph::getInstance().addNode(ptr);
         FieldGraph::getInstance().addObj(m_id, ptr->shared_from_this());
         return React(ptr);
@@ -197,9 +212,9 @@ private:
     UniqueID m_id; // 每个FieldBase都有一个唯一的ID
 };
 
-template <typename SrcType>
+template <IsTrigMode TrigMode = ChangeTrig, typename SrcType>
 auto var(SrcType &&t) {
-    auto ptr = std::make_shared<ReactImpl<std::decay_t<SrcType>>>(std::forward<SrcType>(t));
+    auto ptr = std::make_shared<ReactImpl<TrigMode, std::decay_t<SrcType>>>(std::forward<SrcType>(t));
     ObserverGraph::getInstance().addNode(ptr);
     if constexpr (HasField<std::decay_t<SrcType>>) {
         FieldGraph::getInstance().bindField(ptr->getValue().getID(), ptr->shared_from_this());
@@ -207,31 +222,31 @@ auto var(SrcType &&t) {
     return React(ptr);
 }
 
-template <typename SrcType>
+template <IsTrigMode TrigMode = ChangeTrig, typename SrcType>
 auto constVar(SrcType &&t) {
-    auto ptr = std::make_shared<ReactImpl<const std::decay_t<SrcType>>>(std::forward<SrcType>(t));
+    auto ptr = std::make_shared<ReactImpl<TrigMode, const std::decay_t<SrcType>>>(std::forward<SrcType>(t));
     ObserverGraph::getInstance().addNode(ptr);
     return React(ptr);
 }
 
-template <typename OpExpr>
+template <IsTrigMode TrigMode = ChangeTrig, typename OpExpr>
 auto expr(OpExpr &&opExpr) {
-    auto ptr = std::make_shared<ReactImpl<std::decay_t<OpExpr>>>(std::forward<OpExpr>(opExpr));
+    auto ptr = std::make_shared<ReactImpl<TrigMode, std::decay_t<OpExpr>>>(std::forward<OpExpr>(opExpr));
     ObserverGraph::getInstance().addNode(ptr);
     ptr->set();
     return React(ptr);
 }
 
-template <typename Func, typename... Args>
+template <IsTrigMode TrigMode = ChangeTrig, typename Func, typename... Args>
 auto calc(Func &&fun, Args &&...args) {
-    auto ptr = std::make_shared<ReactImpl<std::decay_t<Func>, std::decay_t<Args>...>>();
+    auto ptr = std::make_shared<ReactImpl<TrigMode, std::decay_t<Func>, std::decay_t<Args>...>>();
     ObserverGraph::getInstance().addNode(ptr);
     ptr->set(std::forward<Func>(fun), std::forward<Args>(args)...);
     return React(ptr);
 }
 
-template <typename Func, typename... Args>
+template <IsTrigMode TrigMode = ChangeTrig, typename Func, typename... Args>
 auto action(Func &&fun, Args &&...args) {
-    return calc(std::forward<Func>(fun), std::forward<Args>(args)...);
+    return calc<TrigMode>(std::forward<Func>(fun), std::forward<Args>(args)...);
 }
 } // namespace reaction

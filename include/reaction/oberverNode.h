@@ -34,6 +34,18 @@ public:
         m_dependentList.erase(node);
     }
 
+    void setName(NodePtr node, const std::string &name) {
+        m_nameList[node] = name;
+    }
+
+    std::string getName(NodePtr node) {
+        if (m_nameList.contains(node)) {
+            return m_nameList[node];
+        } else {
+            return "";
+        }
+    }
+
 private:
     bool hasCycle(NodePtr source, NodePtr target) {
         m_observerList.at(target).get().insert(source);
@@ -125,6 +137,7 @@ private:
     std::unordered_map<NodePtr, NodeSetRef> m_observerList;
     std::unordered_map<NodePtr, NodeSet> m_dependentList;
     std::unordered_map<NodePtr, NodeMapRef> m_repeatList; // 用于存储重复的观察者
+    std::unordered_map<NodePtr, std::string> m_nameList;
 };
 
 class ObserverNode : public std::enable_shared_from_this<ObserverNode> // 使用enable_shared_from_this来支持shared_ptr
@@ -132,8 +145,8 @@ class ObserverNode : public std::enable_shared_from_this<ObserverNode> // 使用
 public:
     ~ObserverNode() = default; // 虚函数需要一个虚析构
 
-    virtual void valueChanged() {
-        this->notify();
+    virtual void valueChanged(bool changed = true) {
+        this->notify(changed);
     }
 
     template <typename... Args>
@@ -142,7 +155,7 @@ public:
         (ObserverGraph::getInstance().addObserver(self, args), ...);
     }
 
-    void notify() {
+    void notify(bool changed = true) {
         for (auto &[repeat, _] : m_repeats) {
             g_delay_list.insert(repeat.lock());
         }
@@ -150,7 +163,7 @@ public:
         for (auto observer : m_observers) {
             if (!g_delay_list.contains(observer)) {
                 if (auto obsPtr = observer.lock()) {
-                    obsPtr->valueChanged();
+                    obsPtr->valueChanged(changed);
                 }
             }
         }
@@ -162,7 +175,7 @@ public:
 
             for (auto &[repeat, _] : m_repeats) {
                 if (auto obsPtr = repeat.lock()) {
-                    obsPtr->valueChanged();
+                    obsPtr->valueChanged(changed);
                 }
             }
         }

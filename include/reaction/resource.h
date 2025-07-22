@@ -4,7 +4,6 @@
 #include <exception>
 #include <memory>
 
-
 namespace reaction {
 template <typename Type>
 class Resource : public ObserverNode // 一个值就对应一个观察者结点
@@ -33,12 +32,18 @@ public:
     }
 
     template <typename T>
-    void updateValue(T &&t) {
+    bool updateValue(T &&t) {
+        bool changed = true;
         if (!m_ptr) {
             m_ptr = std::make_unique<Type>(std::forward<T>(t));
         } else {
+            if constexpr (ComparableType<Type>) {
+                changed = (*m_ptr != std::forward<T>(t)); // 如果是可比较类型，检查是否真的改变了
+            }
             *m_ptr = std::forward<T>(t);
         }
+
+        return changed;
     }
 
 private:

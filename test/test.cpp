@@ -233,6 +233,115 @@ TEST(ReactionTest, TestRepeatDependency3) {
     EXPECT_EQ(triggerCount, 1);
     EXPECT_EQ(ds.get(), 6);
 }
+
+TEST(ReactionTest, TestChangeTrig) {
+    auto a = reaction::var(1);
+    auto b = reaction::var(2);
+    auto c = reaction::var(3);
+    int triggerCountA = 0;
+    int triggerCountB = 0;
+    auto ds = reaction::calc<reaction::AlwaysTrig>([&triggerCountA](int aa, double bb) { ++triggerCountA; return aa + bb; }, a, b);
+    auto dds = reaction::calc([&triggerCountB](auto aa, auto cc) { ++triggerCountB; return aa + cc; }, a, c);
+    EXPECT_EQ(triggerCountA, 1);
+    EXPECT_EQ(triggerCountB, 1);
+    a.value(1);
+    EXPECT_EQ(triggerCountA, 2);
+    EXPECT_EQ(triggerCountB, 1);
+
+    a.value(2);
+    EXPECT_EQ(triggerCountA, 3);
+    EXPECT_EQ(triggerCountB, 2);
+}
+
+TEST(ReactionTest, TestFilterTrig) {
+    auto a = reaction::var(1);
+    auto b = reaction::var(2);
+    auto c = reaction::var(3);
+    auto ds = reaction::calc([](int aa, double bb) { return aa + bb; }, a, b);
+    auto dds = reaction::calc<reaction::FilterTrig>([](auto cc, auto dsds) { return cc + dsds; }, c, ds);
+    *a = 2;
+    EXPECT_EQ(ds.get(), 4);
+    EXPECT_EQ(dds.get(), 7);
+
+    dds.filter([&]() { return c() + ds() < 10; });
+    *a = 3;
+    EXPECT_EQ(dds.get(), 8);
+
+    *a = 5;
+    EXPECT_EQ(dds.get(), 8);
+}
+
+// TEST(ReactionTest, TestCloseStra) {
+//     auto a = reaction::var(1).setName("a");
+//     auto b = reaction::var(2).setName("b");
+
+//     auto dsB = reaction::calc([](auto aa) { return aa; }, a).setName("dsB");
+//     auto dsC = reaction::calc([](auto aa) { return aa; }, a).setName("dsC");
+//     auto dsD = reaction::calc([](auto aa) { return aa; }, a).setName("dsD");
+//     auto dsE = reaction::calc([](auto aa) { return aa; }, a).setName("dsE");
+//     auto dsF = reaction::calc([](auto aa) { return aa; }, a).setName("dsF");
+//     auto dsG = reaction::calc([](auto aa) { return aa; }, a).setName("dsG");
+
+//     {
+//         auto dsA = reaction::calc<reaction::ChangeTrig, reaction::CloseStra>([](int aa) { return aa; }, a).setName("dsA");
+//         dsB.reset([&]() { return a() + dsA(); });
+//         dsC.reset([&]() { return a() + dsA() + dsB(); });
+//         dsD.reset([&]() { return dsA() + dsB() + dsC(); });
+//         dsE.reset([&]() { return dsB() * dsC() + dsD(); });
+//         dsF.reset([&]() { return a() + b(); });
+//         dsG.reset([&]() { return dsA() + dsF(); });
+//     }
+
+//     EXPECT_FALSE(static_cast<bool>(dsB));
+//     EXPECT_FALSE(static_cast<bool>(dsC));
+//     EXPECT_FALSE(static_cast<bool>(dsD));
+//     EXPECT_FALSE(static_cast<bool>(dsE));
+//     EXPECT_TRUE(static_cast<bool>(dsF));
+//     EXPECT_FALSE(static_cast<bool>(dsG));
+// }
+
+// TEST(ReactionTest, TestKeepStra) {
+//     auto a = reaction::var(1).setName("a");
+
+//     auto dsB = reaction::calc([](auto aa) { return aa; }, a).setName("dsB");
+//     auto dsC = reaction::calc([](auto aa) { return aa; }, a).setName("dsC");
+
+//     {
+//         auto dsA = reaction::calc([](int aa) { return aa; }, a).setName("dsA");
+
+//         dsB.reset([](int aa, int AA) { return aa + AA; }, a, dsA);
+//         dsC.reset([](int aa, int AA, int BB) { return aa + AA + BB; }, a, dsA, dsB);
+//     }
+
+//     EXPECT_EQ(dsB.get(), 2);
+//     EXPECT_EQ(dsC.get(), 4);
+
+//     a.value(10);
+//     EXPECT_EQ(dsB.get(), 20);
+//     EXPECT_EQ(dsC.get(), 40);
+// }
+
+// TEST(ReactionTest, TestLastStra) {
+//     auto a = reaction::var(1).setName("a");
+
+//     auto dsB = reaction::calc([](auto aa) { return aa; }, a).setName("dsB");
+//     auto dsC = reaction::calc([](auto aa) { return aa; }, a).setName("dsC");
+
+//     {
+//         auto dsA = reaction::calc<reaction::ChangeTrig, reaction::LastStra>([](int aa) { return aa; }, a).setName("dsA");
+
+//         dsB.reset([](int aa, int AA) { return aa + AA; }, a, dsA);
+//         dsC.reset([](int aa, int AA, int BB) { return aa + AA + BB; }, a, dsA, dsB);
+//     }
+
+//     EXPECT_EQ(dsB.get(), 2);
+//     EXPECT_EQ(dsC.get(), 4);
+
+//     a.value(10);
+//     EXPECT_EQ(dsB.get(), 11);
+//     EXPECT_EQ(dsC.get(), 22);
+// }
+
 // struct ProcessedData {
 //     std::string info;
 //     int checksum;

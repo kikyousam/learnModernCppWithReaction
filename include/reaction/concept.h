@@ -3,11 +3,16 @@
 #include <memory>
 
 namespace reaction {
+template <typename T>
+concept IsTrigMode = requires(T t) {
+    { t.checkTrigger() } -> std::same_as<bool>;
+};
+
 // ------------------------------------------forward declaration-----------------------------------
 struct VarExpr {};
 struct CalcExpr {};
 
-template <typename Type, typename... Args>
+template <IsTrigMode TrigMode, typename Type, typename... Args>
 class ReactImpl;
 
 template <typename ReactType>
@@ -66,6 +71,11 @@ concept IsDataReact = requires(T t) {
     requires IsReactNode<T> && !VoidType<typename T::ValueType>;
 };
 
+template <typename T>
+concept ComparableType = requires(T &a, T &b) {
+    { a == b } -> std::same_as<bool>;
+    { a != b } -> std::same_as<bool>;
+};
 // ------------------------------------------traits------------------------------------------------
 template <typename T>
 struct IsReact : std::false_type {
@@ -81,19 +91,19 @@ struct ExpressionTraits {
     using type = T;
 };
 
-template <NonInvocableType T>
-struct ExpressionTraits<React<ReactImpl<T>>> {
+template <IsTrigMode TrigMode, NonInvocableType T>
+struct ExpressionTraits<React<ReactImpl<TrigMode, T>>> {
     using type = T;
 };
 
-template <typename Fun, typename... Args>
-struct ExpressionTraits<React<ReactImpl<Fun, Args...>>> {
+template <IsTrigMode TrigMode, typename Fun, typename... Args>
+struct ExpressionTraits<React<ReactImpl<TrigMode, Fun, Args...>>> {
     using rawType = std::invoke_result_t<Fun, typename ExpressionTraits<Args>::type...>; // 为了避免歧义，递归萃取Args中的类型
     using type = std::conditional_t<VoidType<rawType>, VoidWrapper, rawType>;            // 如果是void类型，使用VoidWrapper
 };
 
-template <typename Fun, typename... Args>
-using ReturnType = typename ExpressionTraits<React<ReactImpl<Fun, Args...>>>::type;
+template <IsTrigMode TrigMode, typename Fun, typename... Args>
+using ReturnType = typename ExpressionTraits<React<ReactImpl<TrigMode, Fun, Args...>>>::type;
 
 template <typename T>
 struct BinaryOpExprTraits : std::false_type {

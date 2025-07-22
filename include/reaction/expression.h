@@ -1,8 +1,7 @@
 #pragma once
 
 #include "reaction/resource.h"
-#include <tuple>
-
+#include "reaction/triggerMode.h"
 namespace reaction {
 template <typename Op, typename L, typename R>
 class BinaryOpExpr {
@@ -70,25 +69,25 @@ auto makeBinaryOpExpr(L &&lhs, R &&rhs) {
 }
 
 template <typename L, typename R>
-    requires IsValidExprOperand<L, R>
+requires IsValidExprOperand<L, R>
 auto operator+(L &&lhs, R &&rhs) {
     return makeBinaryOpExpr<addOp>(std::forward<L>(lhs), std::forward<R>(rhs));
 }
 
 template <typename L, typename R>
-    requires IsValidExprOperand<L, R>
+requires IsValidExprOperand<L, R>
 auto operator-(L &&lhs, R &&rhs) {
     return makeBinaryOpExpr<subOp>(std::forward<L>(lhs), std::forward<R>(rhs));
 }
 
 template <typename L, typename R>
-    requires IsValidExprOperand<L, R>
+requires IsValidExprOperand<L, R>
 auto operator*(L &&lhs, R &&rhs) {
     return makeBinaryOpExpr<mulOp>(std::forward<L>(lhs), std::forward<R>(rhs));
 }
 
 template <typename L, typename R>
-    requires IsValidExprOperand<L, R>
+requires IsValidExprOperand<L, R>
 auto operator/(L &&lhs, R &&rhs) {
     return makeBinaryOpExpr<divOp>(std::forward<L>(lhs), std::forward<R>(rhs));
 }
@@ -98,18 +97,24 @@ template <typename... Ts>
 class Expression;
 
 // 特化2：复杂表达式（多个参数）
-template <typename Fun, typename... Args>
-class Expression<Fun, Args...> : public Resource<ReturnType<Fun, Args...>> {
+template <IsTrigMode TrigMode, typename Fun, typename... Args>
+class Expression<TrigMode, Fun, Args...> : public Resource<ReturnType<TrigMode, Fun, Args...>>, public TrigMode {
 public:
     using ExprType = CalcExpr;
-    using ValueType = ReturnType<Fun, Args...>;
+    using ValueType = ReturnType<TrigMode, Fun, Args...>;
 
     template <typename F, typename... A>
     void setSource(F &&fun, A &&...args) {
-        if constexpr (std::convertible_to<ReturnType<std::decay_t<F>, std::decay_t<A>...>, ValueType>) {
+        if constexpr (std::convertible_to<ReturnType<TrigMode, std::decay_t<F>, std::decay_t<A>...>, ValueType>) {
             this->updateObserver(args.getPtr()...);
             setFunctor(createFun(std::forward<F>(fun), std::forward<A>(args)...));
-            evaluate();
+
+            if constexpr (!VoidType<ValueType>) {
+                this->notify(this->updateValue(evaluate()));
+            } else {
+                evaluate();
+                this->notify();
+            }
         }
     }
 
@@ -118,9 +123,26 @@ public:
     }
 
 private:
-    void valueChanged() override {
-        evaluate();
-        this->notify();
+    void valueChanged(bool Changed = true) override {
+        if constexpr (std::is_same_v<TrigMode, ChangeTrig>) {
+            TrigMode::setChanged(Changed); // 如果是ChangeTrig模式，设置changed状态
+        }
+
+        if (TrigMode::checkTrigger()) {
+            if constexpr (!VoidType<ValueType>) {
+                auto oldValue = this->getValue();
+                auto newValue = evaluate();
+                this->updateValue(newValue);
+                if constexpr (ComparableType<ValueType>) {
+                    this->notify(oldValue != newValue); // 如果值真的改变了，通知观察者
+                } else {
+                    this->notify(); // 如果不可比较类型，直接通知
+                }
+            } else {
+                evaluate();
+                this->notify();
+            }
+        }
     }
 
     template <typename F, typename... A>
@@ -135,11 +157,11 @@ private:
         };
     }
 
-    void evaluate() {
+    auto evaluate() const {
         if constexpr (VoidType<ValueType>) {
             std::invoke(m_fun);
         } else {
-            this->updateValue(std::invoke(m_fun));
+            return std::invoke(m_fun);
         }
     }
 
@@ -151,9 +173,8 @@ private:
 };
 
 // 特化1：简单表达式（单一参数）
-template <NonInvocableType Type>
-    requires(!IsBinaryOpExpr<Type>)
-class Expression<Type> : public Resource<Type> {
+template <IsTrigMode TrigMode, NonInvocableType Type>
+requires(!IsBinaryOpExpr<Type>) class Expression<TrigMode, Type> : public Resource<Type> {
 public:
     // Expression(Type &&t) : Resource<Type>(std::forward<Type>(t));  // 在派生类中委托构造基类的构造函数。 CPP11可以用下面替代
     using ExprType = VarExpr;
@@ -161,9 +182,9 @@ public:
     using ValueType = Type;
 };
 
-template <typename Op, typename L, typename R>
-class Expression<BinaryOpExpr<Op, L, R>>
-    : public Expression<std::function<typename std::common_type_t<typename L::ValueType, typename R::ValueType>()>> {
+template <IsTrigMode TrigMode, typename Op, typename L, typename R>
+class Expression<TrigMode, BinaryOpExpr<Op, L, R>>
+    : public Expression<TrigMode, std::function<typename std::common_type_t<typename L::ValueType, typename R::ValueType>()>> {
 public:
     template <typename T>
     Expression(T &&t) : m_expr(std::forward<T>(t)) {}
